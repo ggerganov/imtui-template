@@ -1,0 +1,4 @@
+.exrc
+.cache
+build/
+build-debug/
