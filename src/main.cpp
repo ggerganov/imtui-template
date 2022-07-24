@@ -150,6 +150,7 @@ struct UI {
     int mainWindowW     = 30;
     int mainWindowH     = 30;
     int infoWindowW     = 60;
+    int aboutWindowW    = 40;
     int messagesWindowH = 30;
     int workspaceInfoW  = 30;
     int mentionPanelW   = 30;
@@ -793,11 +794,15 @@ int main() {
                      ImGuiWindowFlags_NoCollapse |
                      ImGuiWindowFlags_MenuBar);
 
+        bool doOpenAbout = false;
+
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("Slack ")) {
                 ImGui::TextDisabled("%s", "");
 
-                ImGui::MenuItem("About Slack");
+                if (ImGui::MenuItem("About Slack")) {
+                    doOpenAbout = true;
+                }
 
                 ImGui::TextDisabled("--------------");
 
@@ -894,14 +899,98 @@ int main() {
             if (ImGui::BeginMenu("Help ")) {
                 ImGui::TextDisabled("%s", "");
 
-                if (ImGui::MenuItem("About")) {
-                }
+                ImGui::MenuItem("Keyboard Shortcuts");
+                ImGui::MenuItem("Contact Us");
 
                 ImGui::TextDisabled("%s", "");
                 ImGui::EndMenu();
             }
 
             ImGui::EndMenuBar();
+        }
+
+        // About Slack
+        {
+            if (doOpenAbout) {
+                ImGui::OpenPopup("About Slack");
+                doOpenAbout = false;
+            }
+
+            ImGui::SetNextWindowPos(ImVec2(screen->nx/2.0f - g_ui.aboutWindowW/2.0f, screen->ny/3.0f), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(g_ui.aboutWindowW, 0), ImGuiCond_Always);
+            if (ImGui::BeginPopupModal("About Slack", NULL,
+                                       ImGuiWindowFlags_AlwaysAutoResize |
+                                       ImGuiWindowFlags_NoMove)) {
+                ImGui::PushStyleColor(ImGuiCol_Text,   g_ui.colors.mainWindowTextFG);
+                ImGui::PushStyleColor(ImGuiCol_Button, g_ui.colors.mainWindowBG);
+
+                ImGui::Text("%s", "");
+                ImGui::Text("%s", "");
+
+                {
+                    const auto p0 = ImGui::GetCursorScreenPos();
+                    {
+                        const char * txt = "#";
+                        ImGui::SetCursorScreenPos({ p0.x + g_ui.aboutWindowW/2.0f - ImGui::CalcTextSize(txt).x/2.0f, p0.y });
+                        auto col = g_ui.colors.mainWindowTitleFG;
+                        const auto t = ImGui::GetTime();
+                        const int it = (int(t/0.25f))%5;
+                        if (it == 0) col = toVec4(255, 255, 255);
+                        if (it == 1) col = toVec4(128, 128, 255);
+                        if (it == 2) col = toVec4(  0, 255,   0);
+                        if (it == 3) col = toVec4(255,   0,   0);
+                        if (it == 4) col = toVec4(255, 255,   0);
+
+                        ImGui::TextColored(col, "%s", txt);
+                    }
+
+                    ImGui::SetCursorScreenPos({ p0.x + g_ui.aboutWindowW - 6, p0.y - 1 });
+                    if (ImGui::Button("|x|")) {
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+
+                ImGui::Text("%s", "");
+                ImGui::Text("%s", "");
+
+                {
+                    const char * txt = "Slack (TUI)";
+                    const auto p0 = ImGui::GetCursorScreenPos();
+                    ImGui::SetCursorScreenPos({ p0.x + g_ui.aboutWindowW/2.0f - ImGui::CalcTextSize(txt).x/2.0f, p0.y });
+                    ImGui::TextColored(g_ui.colors.mainWindowTitleFG, "%s", txt);
+                }
+
+                ImGui::Text("%s", "");
+                ImGui::Text("%s", "");
+
+                {
+                    const char * txt = "Version 0.1.0";
+                    const auto p0 = ImGui::GetCursorScreenPos();
+                    ImGui::SetCursorScreenPos({ p0.x + g_ui.aboutWindowW/2.0f - ImGui::CalcTextSize(txt).x/2.0f, p0.y });
+                    ImGui::Text("%s", txt);
+                }
+
+                {
+                    const char * txt = "https://github.com/ggerganov/imtui";
+                    const auto p0 = ImGui::GetCursorScreenPos();
+                    ImGui::SetCursorScreenPos({ p0.x + g_ui.aboutWindowW/2.0f - ImGui::CalcTextSize(txt).x/2.0f, p0.y });
+                    ImGui::Text("%s", txt);
+                }
+
+                ImGui::Text("%s", "");
+
+                {
+                    const char * txt = "@2022 Georgi Gerganov";
+                    const auto p0 = ImGui::GetCursorScreenPos();
+                    ImGui::SetCursorScreenPos({ p0.x + g_ui.aboutWindowW/2.0f - ImGui::CalcTextSize(txt).x/2.0f, p0.y });
+                    ImGui::Text("%s", txt);
+                }
+
+                ImGui::Text("%s", "");
+
+                ImGui::PopStyleColor(2);
+                ImGui::EndPopup();
+            }
         }
 
         // left panel
