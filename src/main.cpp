@@ -2,6 +2,8 @@
 
 #include "imtui/imtui-impl-ncurses.h"
 
+#include "logs.h"
+
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -74,6 +76,7 @@ struct ColorTheme {
     ImVec4 messageTime    = toVec4( 92,  92,  92);
     ImVec4 messageHovered = toVec4( 48,  48,  48);
     ImVec4 messageReact   = toVec4(255, 255,   0);
+    ImVec4 messageReplies = toVec4(128, 128, 255);
 
     ImVec4 inputBG            = toVec4( 48,  48,  48);
     ImVec4 inputSendBG        = toVec4( 48,  92,  48);
@@ -90,7 +93,7 @@ struct ColorTheme {
 
 struct Message {
     int32_t t_s; // timestamp in seconds
-    int32_t uid; // usedId
+    int32_t uid; // userId
 
     std::string text;
 
@@ -126,6 +129,15 @@ struct Channel {
 
     std::vector<User> members;
     std::vector<MessageWithReplies> messages;
+
+    bool isMember(int32_t uid) const {
+        for (auto &member : members) {
+            if (member.id == uid) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 struct UI {
@@ -155,6 +167,8 @@ struct UI {
     bool showApps           = true;
     bool showStyleEditor    = false;
     bool showThreadPanel    = true;
+
+    bool doScrollMain   = false;
 
     std::vector<Channel> channels;
     int selectedChannel = -1;
@@ -430,8 +444,18 @@ bool UI::renderMessages(const std::vector<MessageWithReplies> & messages, int wi
             ImGui::Text("%d", message.msg.reactDown);
         }
 
+        if (message.replies.size() > 0) {
+            if (message.msg.reactUp > 0 || message.msg.reactDown > 0) {
+                ImGui::SameLine();
+                ImGui::Text("|");
+                ImGui::SameLine();
+            }
+            ImGui::TextColored(colors.messageReplies, "%d replies", (int) message.replies.size());
+        }
+
         const auto p1 = ImVec2 { ImGui::GetCursorScreenPos().x + width, ImGui::GetCursorScreenPos().y };
 
+        bool doUpvote = false;
         bool doReplyInThead = false;
 
         if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(p0, p1)) {
@@ -452,6 +476,7 @@ bool UI::renderMessages(const std::vector<MessageWithReplies> & messages, int wi
                 ImGui::TextColored(colors.messageReact, "%s", "[+]");
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetNextWindowPos({ ImGui::GetIO().MousePos.x - 10, p0.y - 4 });
+                    ImGui::SetNextWindowSize({ 40, 0 });
                     ImGui::BeginTooltip();
                     ImGui::Text("%s", "");
                     ImGui::TextColored(colors.messageReact, "%s", "[+]");
@@ -482,6 +507,7 @@ bool UI::renderMessages(const std::vector<MessageWithReplies> & messages, int wi
                 ImGui::TextColored(colors.messageReact, "%s", "[-]");
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetNextWindowPos({ ImGui::GetIO().MousePos.x - 10, p0.y - 4 });
+                    ImGui::SetNextWindowSize({ 40, 0 });
                     ImGui::BeginTooltip();
                     ImGui::Text("%s", "");
                     ImGui::TextColored(colors.messageReact, "%s", "[-]");
@@ -505,6 +531,22 @@ bool UI::renderMessages(const std::vector<MessageWithReplies> & messages, int wi
                 ImGui::Text("%d", message.msg.reactDown);
             }
 
+            if (message.replies.size() > 0) {
+                if (message.msg.reactUp > 0 || message.msg.reactDown > 0) {
+                    ImGui::SameLine();
+                    ImGui::Text("|");
+                    ImGui::SameLine();
+                }
+                ImGui::TextColored(colors.messageReplies, "%d replies", (int) message.replies.size());
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SameLine();
+                    ImGui::SmallButton("View thread");
+                    if (ImGui::IsMouseDown(0)) {
+                        doReplyInThead = true;
+                    }
+                }
+            }
+
             auto savePos = ImGui::GetCursorScreenPos();
 
             const int offsetX = isThread ? 6 : 11;
@@ -512,6 +554,9 @@ bool UI::renderMessages(const std::vector<MessageWithReplies> & messages, int wi
             ImGui::SetCursorScreenPos({ p1.x - offsetX, p0.y });
             ImGui::SmallButton("[+]");
             if (ImGui::IsItemHovered()) {
+                if (ImGui::IsMouseReleased(0)) {
+                    doUpvote = true;
+                }
                 ImGui::SetNextWindowPos({ ImGui::GetIO().MousePos.x - 10, ImGui::GetIO().MousePos.y - 2 });
                 ImGui::SetTooltip("React with +1");
             }
@@ -529,6 +574,12 @@ bool UI::renderMessages(const std::vector<MessageWithReplies> & messages, int wi
             }
 
             ImGui::SetCursorScreenPos(savePos);
+        }
+
+        if (doUpvote) {
+            if (!isThread) {
+                channels[selectedChannel].messages[i].msg.reactUp++;
+            }
         }
 
         if (doReplyInThead) {
@@ -573,10 +624,10 @@ int main() {
                 { true,  0, "rust",     "Tell us how great this language is", {}, {} },
                 { false, 0, "c++",      "The best language",                  {}, {} },
                 { false, 2, "imtui",    "The best TUI library",               {}, {} },
-                { false, 0, "reddit",   "",                                   {}, {} },
+                { false, 0, "reddit",   "Dive into anything",                 {}, {} },
                 { false, 0, "hn",       "Hacker News",                        {}, {} },
-                { true,  0, "news",     "",                                   {}, {} },
-                { false, 3, "builds",   "",                                   {}, {} },
+                { true,  0, "news",     "Mainstream media news",              {}, {} },
+                { false, 3, "builds",   "Build reports",                      {}, {} },
             };
 
             g_ui.selectedChannel = 2;
@@ -598,26 +649,128 @@ int main() {
                 { 10, true , false, "Bryce Bekki",     "", {}},
             };
 
-            g_ui.channels[2].members.push_back(g_ui.users[0]);
-            g_ui.channels[2].members.push_back(g_ui.users[2]);
-            g_ui.channels[2].members.push_back(g_ui.users[3]);
-
             g_ui.selectedUser = -1;
+
+            // assign users to random set of channels
+            for (auto & user : g_ui.users) {
+                const int nMembership = rand()%g_ui.channels.size() + 1;
+
+                for (int i = 0; i < nMembership; i++) {
+                    int channelIndex = rand()%g_ui.channels.size();
+                    while (g_ui.channels[channelIndex].isMember(user.id)) {
+                        channelIndex = rand()%g_ui.channels.size();
+                    }
+                    g_ui.channels[channelIndex].members.push_back(user);
+                }
+            }
         }
 
-        // messages
-        {
-            auto & channel = g_ui.channels[g_ui.selectedChannel];
-
-            for (int i = 0; i < 10; ++i) {
-                channel.messages.push_back({ { i, i/3, "Hello, world!", rand()%100 > 80 ? rand()%5 : 0, rand()%100 > 80 ? rand()%5 : 0, }, {} });
+        // filter the logs, because we only support single-byte strings
+        std::vector<Log> logs;
+        for (auto & cur : kLogs) {
+            std::string text;
+            for (auto & ch : cur.text) {
+                if (ch > 127 || ch < 32) {
+                    text += "@";
+                } else {
+                    text += ch;
+                }
             }
 
-            channel.messages.push_back({ { 563453, 0,
-                "aaaaaaaaaaaaaaadfj hdsjk hhjksdfh sdjkfh sdjkfh jsdkfh djkshjksdfh sdjkfh sdjkfh jsdkfh djkshjksdfh sdjkfh sdjkfh jsdkfh djkshjksdfh sdjkfh sdjkfh jsdkfh djkshjksdfh sdjkfh sdjkfh jsdkfh djkshjksdfh sdjkfh sdjkfh jsdkfh djksjksdfh sdjkfh sdjkfh jsdkfh djks This is a very long message", 0, 2, }, {} });
+            logs.push_back({ cur.username, std::move(text) });
+        }
 
-            for (int i = 0; i < 100; ++i) {
-                channel.messages.push_back({ { i, i % 5, "Hello, world!", rand()%100 > 80 ? rand()%5 : 0, rand()%100 > 80 ? rand()%5 : 0, }, {} });
+        // generate random channel messages
+        for (auto & channel : g_ui.channels) {
+            auto t = tGet() - 24*3600*(rand()%100 + 10);
+
+            int lastUid = -1;
+            int logId = 1 + rand()%(logs.size() - 2);
+            const int nMessages = rand()%100 + 10;
+
+            for (int i = 0; i < nMessages; ++i) {
+                const bool isSameUser = (logs[i - 1].username == logs[logId].username);
+
+                int uid = lastUid == -1 || !isSameUser ? rand()%g_ui.users.size() : lastUid;
+                while (!isSameUser && uid == lastUid) {
+                    uid = rand()%g_ui.users.size();
+                }
+                lastUid = uid;
+
+                if (isSameUser) {
+                    t += rand()%60;
+                } else {
+                    t += rand()%3600;
+                }
+
+                int nReactUp   = rand()%100 > 80 ? rand()%5 : 0;
+                int nReactDown = rand()%100 > 90 ? rand()%5 : 0;
+
+                if (logs[logId + 1].username == logs[logId].username) {
+                    nReactUp = 0;
+                    nReactDown = 0;
+                }
+
+                channel.messages.push_back({ {
+                    t, uid, logs[logId].text, nReactUp, nReactDown, }, {}
+                });
+
+                // random threads
+                const int nReplies = rand()%100 > 90 ? rand()%30 : 0;
+                for (int j = 0; j < nReplies; ++j) {
+                    t += rand()%60;
+                    logId = std::max((int)((logId + 1)%(logs.size() - 1)), 1);
+
+                    nReactUp   = rand()%100 > 80 ? rand()%5 : 0;
+                    nReactDown = rand()%100 > 90 ? rand()%5 : 0;
+
+                    channel.messages.back().replies.push_back({ {
+                        t, (int) (rand()%g_ui.users.size()), logs[logId].text, 0, 0,
+                    }, {} });
+                }
+
+                logId = std::max((int)((logId + 1)%(logs.size() - 1)), 1);
+            }
+        }
+
+        // generate random DMs
+        for (auto & user : g_ui.users) {
+            if (user.id == 0) continue;
+
+            auto t = tGet() - 24*3600*(rand()%100 + 10);
+
+            int lastUid = -1;
+            int logId = 1 + rand()%(logs.size() - 2);
+            const int nMessages = rand()%100 + 10;
+
+            for (int i = 0; i < nMessages; ++i) {
+                const bool isSameUser = (logs[i - 1].username == logs[logId].username);
+
+                int uid = lastUid == -1 || !isSameUser ? rand()%g_ui.users.size() : lastUid;
+                while (!isSameUser && (uid == lastUid || (uid != 0 && uid != user.id))) {
+                    uid = rand()%g_ui.users.size();
+                }
+                lastUid = uid;
+
+                if (isSameUser) {
+                    t += rand()%60;
+                } else {
+                    t += rand()%3600;
+                }
+
+                int nReactUp   = rand()%100 > 80 ? rand()%5 : 0;
+                int nReactDown = rand()%100 > 90 ? rand()%5 : 0;
+
+                if (logs[logId + 1].username == logs[logId].username) {
+                    nReactUp = 0;
+                    nReactDown = 0;
+                }
+
+                user.messages.push_back({ {
+                    t, uid, logs[logId].text, nReactUp, nReactDown, }, {}
+                });
+
+                logId = std::max((int)((logId + 1)%(logs.size() - 1)), 1);
             }
         }
     }
@@ -902,8 +1055,12 @@ int main() {
             }
 
             ImGui::Text("%s", "");
-            ImGui::Text("%g %g %d %d", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y, ImGui::GetIO().MouseDown[0], ImGui::GetIO().MouseDown[1]);
-            ImGui::Text("%d %d", g_ui.threadChannel, g_ui.threadMessage);
+            ImGui::Text("%s", "");
+            ImGui::Text("%s", "");
+
+            ImGui::TextDisabled("Debug:");
+            ImGui::TextDisabled("%g %g %d %d", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y, ImGui::GetIO().MouseDown[0], ImGui::GetIO().MouseDown[1]);
+            ImGui::TextDisabled("%d %d", g_ui.threadChannel, g_ui.threadMessage);
 
             for (int i = 1; i < 128; ++i) {
                 if (ImGui::IsKeyPressed(i)) {
@@ -987,6 +1144,11 @@ int main() {
                 ImGui::BeginChild("messages", ImVec2(g_ui.mainWindowW - 2, g_ui.messagesWindowH), true);
 
                 g_ui.renderMessages(channel.messages, g_ui.mainWindowW, false);
+
+                if (g_ui.doScrollMain) {
+                    ImGui::SetScrollHereY(1.0f);
+                    g_ui.doScrollMain = false;
+                }
 
                 ImGui::EndChild();
 
@@ -1114,6 +1276,11 @@ int main() {
 
                 g_ui.renderMessages(user.messages, g_ui.mainWindowW, false);
 
+                if (g_ui.doScrollMain) {
+                    ImGui::SetScrollHereY(1.0f);
+                    g_ui.doScrollMain = false;
+                }
+
                 ImGui::EndChild();
             }
 
@@ -1227,7 +1394,13 @@ int main() {
                 }
 
                 if (doSend) {
-                    //g_ui.sendMessage(input);
+                    if (g_ui.selectedChannel > 0) {
+                        g_ui.channels[g_ui.selectedChannel].messages.push_back({ { tGet(), 0, input, 0, 0, }, {} });
+                    }
+                    if (g_ui.selectedUser > 0) {
+                        g_ui.users[g_ui.selectedUser].messages.push_back({ { tGet(), 0, input, 0, 0, }, {} });
+                    }
+                    g_ui.doScrollMain = true;
                     memset(input, 0, sizeof(input));
                 }
 
@@ -1421,7 +1594,7 @@ int main() {
                 }
 
                 if (doSend) {
-                    //g_ui.sendMessage(input);
+                    g_ui.channels[g_ui.threadChannel].messages[g_ui.threadMessage].replies.push_back({ { tGet(), 0, input, 0, 0, }, {} });
                     memset(input, 0, sizeof(input));
                 }
 
