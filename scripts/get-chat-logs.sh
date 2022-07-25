@@ -7,9 +7,6 @@ urls=(
     https://freenode.logbot.info/rust-embedded/20210217/raw
     https://freenode.logbot.info/gitlab/20210423/raw
     https://freenode.logbot.info/gitlab/20210202/raw
-    https://freenode.logbot.info/jenkins/20210414/raw
-    https://freenode.logbot.info/stripe/20210610/raw
-    https://freenode.logbot.info/firefox/20210601/raw
 )
 
 for url in "${urls[@]}" ; do
@@ -34,7 +31,7 @@ echo "const std::vector<Log> kLogs = {"
 
 cat raw-all | grep "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9] <" | while read line; do
     username=$(echo $line | cut -d '<' -f 2 | cut -d '>' -f 1)
-    msg=$(echo $line | cut -d '>' -f 2 | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')
+    msg=$(echo $line | sed -e 's/^[0-9][0-9]:[0-9][0-9]:[0-9][0-9] <.*> //' | sed -e 's/[a-zA-z0-9_]*: //')
     echo "    { \"$username\", R\"foo($msg)foo\" },"
 done
 
