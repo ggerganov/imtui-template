@@ -1,5 +1,7 @@
 # imtui-template
 
+[![Actions Status](https://github.com/ggerganov/imtui-template/workflows/CI/badge.svg)](https://github.com/ggerganov/imtui-template/actions)
+
 Template repo for simple ImTui apps
 
 <p align="center">
